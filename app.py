@@ -17,20 +17,71 @@ login_attempts = defaultdict(int)
 # 차단된 IP 목록
 blacklist = set()
 
+# IP 위치 정보를 저장할 별도 테이블 생성
+def init_ip_location_table():
+    conn = sqlite3.connect(DB_FILE)
+    curcor = conn.cursor()
+    # PRIMARY KEY AUTOINCREMENT = 자동 증가하는 고유 번호
+    # checked_at TEXT = 언제 조회/저장했는지 확인
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ip_location (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,  
+            ip_address TEXT,                       
+            country TEXT,                           
+            city TEXT,                                
+            is_foreign INTEGER,                       
+            checked_at TEXT)""")
+    conn.commit()
+    conn.close()
+
 # IP -> 국가/도시 변환 (ip-api.com 사용)
 def get_ip_location(ip):
     # ip-api.com 이라는 무료 API에 IP 주소를 보내서 위치 정보를 요청
     res = requests.get(f"http://ip-api.com/json/{ip}")
-    # API가 보내준 응답을 JSON(딕셔너리 형태)으로 변환
     data = res.json()
-    return data.get("country"), data.get("city")
+    
+    country = data.get("country")
+    city = data.get("city")
 
-# 해외 IP 여부 판단 (db의 location은 "도시, Korea" 형식 -> "South Korea" 아님)
-def is_foreign_ip(country):
-    # ip-api.com은 "South Korea"로 반환하지만, db 표기는 "Korea" 이므로 맞춰서 비교
-    if country is None:
-        return None
-    return "Korea" not in country
+    # 해외 여부는 이 함수 안에서 바로 계산해서 함께 저장
+    is_foreign = None
+    if country is not None:
+        is_foreign = "Korea" not in country
+    
+    # 변환 결과를 ip_location 테이블에 기록
+    conn = sqlite3.connect(DB_FILE) 
+    cursor = conn.cursor() 
+    cursor.execute("""
+        INSERT INTO ip_location (ip_address, country, city, is_foreign, checked_at)
+        VALUES (?, ?, ?, ?, ?)
+    """, (
+        ip,
+        country,
+        city,
+        int(is_foreign) if is_foreign is not None else None,
+        datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    ))
+    conn.commit()
+    conn.close()
+
+    return country, city, is_foreign
+
+# db에 이미 저장된 결과를 기준으로 해외 IP 여부를 가져오는 함수
+def is_foreign_ip(ip):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT is_foreign FROM ip_location
+        WHERE ip_address = ?
+        ORDER BY id DESC
+        LIMIT 1
+    """, (ip,))
+    row = cursor.fetchone()
+    conn.close()
+
+    if row is None:
+        return None  # 아직 한 번도 조회 안 된 IP
+    return bool(row[0])
 
 # 반복 로그인 감지 + 블랙리스트 추가 (3회 기준)
 def check_and_block(ip):
@@ -71,9 +122,9 @@ def login():
     if status == "blocked":
         return jsonify({"status": "blocked"}), 403
 
-    # IP -> 국가/도시 변환
-    country, city = get_ip_location(ip)
-    foreign = is_foreign_ip(country)
+    # IP 변환 + db에 기록
+    country, city, foreign = get_ip_location(ip)
+
     location = f"{city}, {country}" if city and country else "Unknown"
 
     # 데이터베이스에 로그인 기록 저장
@@ -112,4 +163,5 @@ def login():
 
 # 서버 실행 부분
 if __name__ == "__main__":
+    init_ip_location_table()  # 서버 시작할 때 ip_location 테이블 없으면 생성
     app.run(debug=True)
