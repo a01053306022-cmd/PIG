@@ -10,101 +10,106 @@ from collections import defaultdict
 
 app = Flask(__name__) # 앱 초기화
 
-login_attempts = defaultdict(int) # IP별 로그인 시도 횟수 저장
-blacklist = set() # 차단된 IP목록 저장
+DB_FILE = "login_log.db"
 
-# DB 초기화
-def init_db():
-    conn = sqlite3.connect("pig.db") # pig.db 파일 열기(없으면 자동 생성)
-    cursor = conn.cursor() #DB에 명령 내릴 수 있는 커서 생성
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS login_log(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT,
-            ip TEXT,
-            country TEXT,
-            city TEXT,
-            device TEXT,
-            time TEXT,
-            is_foreign INTEGER,
-            is_blocked INTEGER)""")
-    conn.commit() # 변경사항 저장
-    conn.close() # DB 연결 닫기
+# IP별 로그인 시도 횟수 저장
+login_attempts = defaultdict(int)
+# 차단된 IP 목록
+blacklist = set()
 
-# IP -> 국가/도시 변환
+# IP -> 국가/도시 변환 (ip-api.com 사용)
 def get_ip_location(ip):
+    # ip-api.com 이라는 무료 API에 IP 주소를 보내서 위치 정보를 요청
     res = requests.get(f"http://ip-api.com/json/{ip}")
+    # API가 보내준 응답을 JSON(딕셔너리 형태)으로 변환
     data = res.json()
     return data.get("country"), data.get("city")
 
-# 해외 IP 여부 판단
+# 해외 IP 여부 판단 (db의 location은 "도시, Korea" 형식 -> "South Korea" 아님)
 def is_foreign_ip(country):
-    if country != "South Korea":
-        return True
-    return False
+    # ip-api.com은 "South Korea"로 반환하지만, db 표기는 "Korea" 이므로 맞춰서 비교
+    if country is None:
+        return None
+    return "Korea" not in country
 
-# 반복 감지 + 블랙리스트 추가 (3회 기준)
+# 반복 로그인 감지 + 블랙리스트 추가 (3회 기준)
 def check_and_block(ip):
-    # 이미 블랙리스트에 있으면 차단
     if ip in blacklist:
         return "blocked"
     
-    # 시도 횟수 1 증가
     login_attempts[ip] += 1
 
-    # 3회 이상이면 블랙리스트 추가
-    if login_attempts[ip] >= 5:
+    if login_attempts[ip] >= 3:
         blacklist.add(ip)
         return "blacklisted"
     
+    # 3회 미만이면 -> 아직은 정상적인 시도로 판단
     return "ok"
 
 # 로그인 API
+# "/login" 이라는 주소로 POST 방식 요청이 오면 아래 함수가 실행
 @app.route("/login", methods=["POST"])
 def login():
+    # 프론트엔드(Streamlit)에서 보낸 JSON 데이터를 꺼냄
     data = request.get_json()
 
-    # 프론트에서 받은 데이터
     ip = request.remote_addr
-    time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    device = data.get("device")
-    username = data.get("username")
+
+    # 현재 시간을 "2026-06-18 14:30" 같은 문자열 형식으로 만듦
+    # db의 timestamp 컬럼 형식과 맞추기 위해 이 포맷을 사용
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    
+    # 프론트로부터 받은 것 없으면 기본값 "Unknown"
+    device_type = data.get("device_type", "Unknown") # 기기 종류
+    os_type = data.get("os_type", "Unknown") # 운영체제 종류
+    browser = data.get("browser", "Unknown") # 브라우저 종류
+    
+    user_id = data.get("user_id")
 
     # 블랙리스트 차단 확인
     status = check_and_block(ip)
     if status == "blocked":
-        # DB에 차단 기록 저장
-        conn = sqlite3.connect("pig.db")
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO login_log VALUES (NULL, ?, ?, NULL, NULL, ?, ?, NULL, 1)",
-                       (username, ip, device, time))
-        conn.commit()
-        conn.close()
         return jsonify({"status": "blocked"}), 403
 
-    # IP → 국가/도시 변환
+    # IP -> 국가/도시 변환
     country, city = get_ip_location(ip)
-    
-    # 해외 IP 여부 확인
     foreign = is_foreign_ip(country)
+    location = f"{city}, {country}" if city and country else "Unknown"
 
-    # DB에 로그인 기록 저장
-    conn = sqlite3.connect("pig.db")
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO login_log VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, 0)",
-                   (username, ip, country, city, device, time, int(foreign)))
-    conn.commit()
-    conn.close()
+    # 데이터베이스에 로그인 기록 저장
+    conn = sqlite3.connect(DB_FILE) # db 파일 연결
+    cursor = conn.cursor() # db에 명령을 내릴 수 있는 커서 객체 생성
 
-    # 프론트에 응답 전송
+    # train_dataset 테이블에 새로운 한 줄(row)을 추가하는 SQL문 실행
+    # 물음표(?)는 나중에 나오는 튜플 값들이 순서대로 들어가는 자리(보안상 안전한 방식)
+    cursor.execute("""
+        INSERT INTO train_dataset
+        (timestamp, user_id, ip_address, location, device_type, os_type, browser, success, session_duration, target)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        timestamp,
+        user_id,
+        ip,
+        location,
+        device_type,
+        os_type,
+        browser,
+        "FALSE" if status == "blacklisted" else "TRUE",
+        0,  # session_duration은 로그인 시점엔 알 수 없어서 0으로 기본값
+        "TRUE" if status == "blacklisted" else "FALSE"
+    ))
+    conn.commit() # 위에서 실행한 INSERT 내용을 실제로 db 파일에 저장
+    conn.close() # db 연결 종료
+
+    # 프론트엔드에 응답 보내기
     return jsonify({
         "status": "ok",
         "country": country,
         "city": city,
-        "foreign_ip": foreign,          # 해외 IP 여부
-        "blacklisted": status == "blacklisted"  # 방금 블랙리스트 추가됐는지
+        "foreign_ip": foreign,
+        "blacklisted": status == "blacklisted"
     })
 
+# 서버 실행 부분
 if __name__ == "__main__":
-    init_db()
     app.run(debug=True)
