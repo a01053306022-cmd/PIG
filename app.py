@@ -20,7 +20,7 @@ blacklist = set()
 # IP 위치 정보를 저장할 별도 테이블 생성
 def init_ip_location_table():
     conn = sqlite3.connect(DB_FILE)
-    curcor = conn.cursor()
+    cursor = conn.cursor()
     # PRIMARY KEY AUTOINCREMENT = 자동 증가하는 고유 번호
     # checked_at TEXT = 언제 조회/저장했는지 확인
     cursor.execute("""
