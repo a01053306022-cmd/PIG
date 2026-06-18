@@ -8,6 +8,9 @@ import sqlite3 # DB 다루는 도구
 # 자동으로 0으로 초기화 해주는 도구(IP횟수 셀 때 사용)
 from collections import defaultdict 
 
+# pipeline.py 안에 있는 process_login_and_alert 함수를 가져와서 사용
+from pipeline import process_login_and_alert
+
 app = Flask(__name__) # 앱 초기화
 
 DB_FILE = "login_log.db"
@@ -16,6 +19,8 @@ DB_FILE = "login_log.db"
 login_attempts = defaultdict(int)
 # 차단된 IP 목록
 blacklist = set()
+# 한 번 본 적 있는 (user_id, device_type) 조합을 기억해두는 집합
+known_devices = set()
 
 # IP 위치 정보를 저장할 별도 테이블 생성
 def init_ip_location_table():
@@ -97,6 +102,14 @@ def check_and_block(ip):
     # 3회 미만이면 -> 아직은 정상적인 시도로 판단
     return "ok"
 
+# 새 기기인지 판단하는 함수
+def check_new_device(user_id, device_type):
+    key = (user_id, device_type)
+    if key in known_devices:
+        return False  # 이미 본 적 있는 조합 -> 새 기기 아님
+    known_devices.add(key)
+    return True  # 처음 보는 조합 -> 새 기기
+
 # 로그인 API
 # "/login" 이라는 주소로 POST 방식 요청이 오면 아래 함수가 실행
 @app.route("/login", methods=["POST"])
@@ -124,8 +137,10 @@ def login():
 
     # IP 변환 + db에 기록
     country, city, foreign = get_ip_location(ip)
-
     location = f"{city}, {country}" if city and country else "Unknown"
+    
+    # 새 기기 여부 판단
+    is_new_device = check_new_device(user_id, device_type)
 
     # 데이터베이스에 로그인 기록 저장
     conn = sqlite3.connect(DB_FILE) # db 파일 연결
@@ -151,6 +166,17 @@ def login():
     ))
     conn.commit() # 위에서 실행한 INSERT 내용을 실제로 db 파일에 저장
     conn.close() # db 연결 종료
+    
+    # 파이프라인 호출
+    pipeline_result = process_login_and_alert(
+        user_id=user_id,
+        reconstruction_error=0,         # detection_model.py 연결 필요
+        is_overseas=bool(is_foreign),
+        is_new_device=is_new_device,
+        fail_count=login_attempts[ip],
+        is_odd_time=False                # 비정상 시간대 판단 로직 필요
+    )
+
 
     # 프론트엔드에 응답 보내기
     return jsonify({
@@ -158,7 +184,8 @@ def login():
         "country": country,
         "city": city,
         "foreign_ip": foreign,
-        "blacklisted": status == "blacklisted"
+        "blacklisted": status == "blacklisted",
+        "risk_result": pipeline_result
     })
 
 # 서버 실행 부분
