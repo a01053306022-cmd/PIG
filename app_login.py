@@ -14,13 +14,13 @@ if "logged_user" not in st.session_state:
 
 def get_realtime_env():
     """실시간으로 접속자의 IP, 위치, OS, 기기, 브라우저 정보를 자동으로 추출"""
-    # 1. 실시간 공인 IP 주소 가져오기 (정확한 API 주소로 수정)
+    # 1. 실시간 공인 IP 주소 가져오기
     try:
         ip_address = requests.get("https://api.ipify.org", timeout=3).text
     except:
         ip_address = "127.0.0.1"
 
-    # 2. IP 기반 실시간 위치 가져오기 (누락된 슬래시 '/' 보정)
+    # 2. IP 기반 실시간 위치 가져오기
     try:
         geo_resp = requests.get(f"http://ip-api.com{ip_address}", timeout=3).json()
         if geo_resp.get("status") == "success":
