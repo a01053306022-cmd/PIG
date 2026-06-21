@@ -1,6 +1,4 @@
 from alert_handler import save_sent_alert
-save_sent_alert(user_id, final_score)
-
 from solapi import SolapiMessageService
 from solapi.model import RequestMessage
 
@@ -10,6 +8,7 @@ API_SECRET = "API_SECRET_입력"
 MY_NUMBER = "01012345678"  # 솔라피에 등록한 발신자 번호
 
 def send_emergency_sms(user_id, final_score):
+    save_sent_alert(user_id, final_score)
     """
     위험 지수 특정값 도달 시 유저에게 긴급 경고 문자를 발송하는 함수
     """
