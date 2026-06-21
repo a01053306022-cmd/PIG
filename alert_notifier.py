@@ -1,9 +1,12 @@
+from alert_handler import save_sent_alert
+save_sent_alert(user_id, final_score)
+
 from solapi import SolapiMessageService
 from solapi.model import RequestMessage
 
 # 솔라피 API 인증 정보 설정
-API_KEY = "여기에_발급받은_API_KEY_입력"
-API_SECRET = "여기에_발급받은_API_SECRET_입력"
+API_KEY = "API_KEY_입력"
+API_SECRET = "API_SECRET_입력"
 MY_NUMBER = "01012345678"  # 솔라피에 등록한 발신자 번호
 
 def send_emergency_sms(user_id, final_score):
