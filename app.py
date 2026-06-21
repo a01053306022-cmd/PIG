@@ -97,10 +97,10 @@ def check_and_block(ip, location, device_type, os_type):
     
     # 3회 이상이면 blacklist 테이블에 추가
     if login_attempts[ip] >= 3:
-       conn = sqlite3.connect(DB_FILE)
-       cursor = conn.cursor()
-       # blacklist 테이블 없으면 자동 생성 (db_handler.py와 동일한 구조)
-       cursor.execute("""
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        # blacklist 테이블 없으면 자동 생성 (db_handler.py와 동일한 구조)
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS blacklist (
                 ip_address TEXT,
                 location TEXT,
