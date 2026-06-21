@@ -8,7 +8,7 @@ import sqlite3 # DB 다루는 도구
 # 자동으로 0으로 초기화 해주는 도구(IP횟수 셀 때 사용)
 from collections import defaultdict 
 
-# pipeline.py 안에 있는 process_login_and_alert 함수를 가져와서 사용
+from db_handler import check_blacklist, insert_login_log
 from pipeline import process_login_and_alert
 
 app = Flask(__name__) # 앱 초기화
@@ -17,8 +17,7 @@ DB_FILE = "login_log.db"
 
 # IP별 로그인 시도 횟수 저장
 login_attempts = defaultdict(int)
-# 차단된 IP 목록
-blacklist = set()
+
 # 한 번 본 적 있는 (user_id, device_type) 조합을 기억해두는 집합
 known_devices = set()
 
@@ -89,14 +88,32 @@ def is_foreign_ip(ip):
     return bool(row[0])
 
 # 반복 로그인 감지 + 블랙리스트 추가 (3회 기준)
-def check_and_block(ip):
-    if ip in blacklist:
+def check_and_block(ip, location, device_type, os_type):
+    # db의 blacklist 테이블과 대조 (db_handler.py의 함수 사용)
+    if check_blacklist(ip, location, device_type, os_type):
         return "blocked"
     
     login_attempts[ip] += 1
-
+    
+    # 3회 이상이면 blacklist 테이블에 추가
     if login_attempts[ip] >= 3:
-        blacklist.add(ip)
+       conn = sqlite3.connect(DB_FILE)
+       cursor = conn.cursor()
+       # blacklist 테이블 없으면 자동 생성 (db_handler.py와 동일한 구조)
+       cursor.execute("""
+            CREATE TABLE IF NOT EXISTS blacklist (
+                ip_address TEXT,
+                location TEXT,
+                device_type TEXT,
+                os_type TEXT
+            )
+        """)
+        cursor.execute("""
+            INSERT INTO blacklist (ip_address, location, device_type, os_type)
+            VALUES (?, ?, ?, ?)
+        """, (ip, location, device_type, os_type))
+        conn.commit()
+        conn.close()
         return "blacklisted"
     
     # 3회 미만이면 -> 아직은 정상적인 시도로 판단
@@ -114,7 +131,7 @@ def check_new_device(user_id, device_type):
 # "/login" 이라는 주소로 POST 방식 요청이 오면 아래 함수가 실행
 @app.route("/login", methods=["POST"])
 def login():
-    # 프론트엔드(Streamlit)에서 보낸 JSON 데이터를 꺼냄
+    # 프론트엔드(app_login.py)에서 보낸 JSON 데이터를 꺼냄
     data = request.get_json()
 
     ip = request.remote_addr
@@ -131,8 +148,14 @@ def login():
     user_id = data.get("user_id")
 
     # 블랙리스트 차단 확인
-    status = check_and_block(ip)
+    status = check_and_block(ip, location, device_type, os_type)
     if status == "blocked":
+        # 차단된 경우에도 real_dataset에 기록 (success=FALSE)
+        insert_login_log(
+            timestamp, user_id, ip, location,
+            device_type, os_type, browser,
+            "FALSE", 0
+        )
         return jsonify({"status": "blocked"}), 403
 
     # IP 변환 + db에 기록
@@ -142,31 +165,15 @@ def login():
     # 새 기기 여부 판단
     is_new_device = check_new_device(user_id, device_type)
 
-    # 데이터베이스에 로그인 기록 저장
-    conn = sqlite3.connect(DB_FILE) # db 파일 연결
-    cursor = conn.cursor() # db에 명령을 내릴 수 있는 커서 객체 생성
-
-    # train_dataset 테이블에 새로운 한 줄(row)을 추가하는 SQL문 실행
-    # 물음표(?)는 나중에 나오는 튜플 값들이 순서대로 들어가는 자리(보안상 안전한 방식)
-    cursor.execute("""
-        INSERT INTO train_dataset
-        (timestamp, user_id, ip_address, location, device_type, os_type, browser, success, session_duration, target)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        timestamp,
-        user_id,
-        ip,
-        location,
-        device_type,
-        os_type,
-        browser,
+    # real_dataset 테이블에 로그인 기록 저장
+    # db_handler.py의 insert_login_log() 사용
+    insert_login_log(
+        timestamp, user_id, ip, location,
+        device_type, os_type, browser,
         "FALSE" if status == "blacklisted" else "TRUE",
-        0,  # session_duration은 로그인 시점엔 알 수 없어서 0으로 기본값
-        "TRUE" if status == "blacklisted" else "FALSE"
-    ))
-    conn.commit() # 위에서 실행한 INSERT 내용을 실제로 db 파일에 저장
-    conn.close() # db 연결 종료
-    
+        0  # session_duration: 로그인 시점엔 알 수 없어서 0
+    )
+
     # 파이프라인 호출
     pipeline_result = process_login_and_alert(
         user_id=user_id,
@@ -176,7 +183,6 @@ def login():
         fail_count=login_attempts[ip],
         is_odd_time=False                # 비정상 시간대 판단 로직 필요
     )
-
 
     # 프론트엔드에 응답 보내기
     return jsonify({
