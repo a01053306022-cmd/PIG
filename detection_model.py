@@ -1,6 +1,3 @@
-from alert_handler import save_sent_alert
-save_sent_alert(user id, final_score)
-
 import torch
 import torch.nn as nn
 
