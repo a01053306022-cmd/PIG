@@ -159,7 +159,7 @@ def login():
         return jsonify({"status": "blocked"}), 403
 
     # IP 변환 + db에 기록
-    country, city, foreign = get_ip_location(ip)
+    country, city, is_foreign = get_ip_location(ip)
     location = f"{city}, {country}" if city and country else "Unknown"
     
     # 새 기기 여부 판단
@@ -189,7 +189,7 @@ def login():
         "status": "ok",
         "country": country,
         "city": city,
-        "foreign_ip": foreign,
+        "foreign_ip": is_foreign,
         "blacklisted": status == "blacklisted",
         "risk_result": pipeline_result
     })
