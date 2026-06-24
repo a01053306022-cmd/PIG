@@ -111,3 +111,49 @@ with torch.no_grad():
     print(f"Precision (정밀도): {precision:.4f}")
     print(f"Recall (재현율): {recall:.4f}")
     print("====================================================================")
+
+
+import sqlite3
+import pandas as pd
+
+db_path = 'login_log.db' 
+conn = sqlite3.connect(db_path)
+cursor = conn.cursor()
+
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS blacklist (
+        ip_address TEXT, location TEXT, device_type TEXT, os_type TEXT
+    )
+""")
+
+# 숫자로 변환되기 전의 원본 데이터 다시 불러오기
+try:
+    raw_test_df = pd.read_csv('test_data.csv')
+    blocked_count = 0
+
+    # 예측 결과(0 정상, 1 해킹)랑 원본 데이터 행 매칭
+    for idx, is_hacker in enumerate(predictions):
+        if is_hacker == 1:
+            row = raw_test_df.iloc[idx]
+            
+            # 에러 방지: get
+            ip = str(row.get('ip_address', f"UNKNOWN_IP_{idx}"))
+            location = str(row.get('location', "Unknown"))
+            device = str(row.get('device_type', "Unknown"))
+            os_type = str(row.get('os_type', "Unknown"))
+            
+            # 중복 등록 방지
+            cursor.execute("SELECT 1 FROM blacklist WHERE ip_address = ?", (ip,))
+            if not cursor.fetchone():
+                cursor.execute("INSERT INTO blacklist VALUES (?, ?, ?, ?)", (ip, location, device, os_type))
+                blocked_count += 1
+
+    conn.commit()
+    print(f"✅ 총 {blocked_count}개의 의심 IP 사전 등록 완료.")
+
+except FileNotFoundError:
+    print("'test_data.csv' 파일이 없어서 등록 스킵함.")
+except Exception as e:
+    print(f"DB 저장 중 에러 발생: {e}")
+finally:
+    conn.close()
