@@ -19,7 +19,7 @@ col1, col2 = st.columns(2)
 with col1:
     success_btn = st.button("✅ 정상 로그인 시도", use_container_width=True)
 with col2:
-    fail_btn = st.button("❌ 일부러 비밀번호 틀리기", use_container_width=True)
+    fail_btn = st.button("❌ 비정상 로그인 시도", use_container_width=True)
 
 if success_btn or fail_btn:
     if not user_id:
@@ -41,7 +41,7 @@ if success_btn or fail_btn:
             # 백엔드(app.py)로 전송
             res = requests.post("http://127.0.0.1:5000/login", json=data)
             
-            # 서버에서 차단 먹인 경우 (HTTP 403)
+            # 서버에서 차단한 경우 (HTTP 403)
             if res.status_code == 403:
                 st.error("🚨 보안 시스템에 의해 차단된 IP입니다. (3회 이상 실패 또는 해킹 의심)")
             else:
@@ -49,10 +49,10 @@ if success_btn or fail_btn:
                 
                 # 버튼 누른 거에 맞춰서 메시지 다르게 띄워주기
                 if not is_success:
-                    st.warning("비밀번호가 틀렸습니다. (서버에 로그인 실패 카운트 누적됨)")
+                    st.warning("비밀번호가 틀렸습니다. (서버에 로그인 실패 카운트 누적)")
                 else:
                     st.success("로그인 성공!")
                     st.info(f"방금 로그인의 AI 위험지수: {result.get('risk_result', {}).get('risk_score', 0)}%")
                     
         except Exception as e:
-            st.error(f"서버랑 연결이 안 돼. app.py가 켜져 있는지 확인해봐! (에러: {e})")
+            st.error(f"에러: {e}")
