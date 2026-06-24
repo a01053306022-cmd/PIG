@@ -84,7 +84,7 @@ with torch.no_grad():
     test_loss = criterion(test_outputs, X_test) #전체 평균 오차
 
     # 데이터 복원 오차 계산
-    sample_losses = torch.mean((test_outputs - X_test)**2, dim=1).numpy()
+    sample_losses = torch.mean((test_outputs - X_test)**2, dim=1).detach().cpu().numpy()
     
     # PR-AUC 계산
     pr_auc = average_precision_score(test_targets, sample_losses)
