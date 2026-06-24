@@ -8,6 +8,7 @@ import sqlite3 # DB 다루는 도구
 # 자동으로 0으로 초기화 해주는 도구(IP횟수 셀 때 사용)
 from collections import defaultdict 
 
+from detection_model import get_reconstruction_error 
 from db_handler import check_blacklist, insert_login_log
 from pipeline import process_login_and_alert
 
@@ -138,6 +139,7 @@ def login():
 
     # 현재 시간을 "2026-06-18 14:30" 같은 문자열 형식으로 만듦
     # db의 timestamp 컬럼 형식과 맞추기 위해 이 포맷을 사용
+    now = datetime.datetime.now()
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     
     # 프론트로부터 받은 것 없으면 기본값 "Unknown"
@@ -146,6 +148,13 @@ def login():
     browser = data.get("browser", "Unknown") # 브라우저 종류
     
     user_id = data.get("user_id")
+
+    # IP 변환 + db에 기록
+    country, city, is_foreign = get_ip_location(ip)
+    location = f"{city}, {country}" if city and country else "Unknown"
+    
+    # 비정상 시간대 판단 로직 추가
+    is_odd_time = 1 <= now.hour <= 5
 
     # 블랙리스트 차단 확인
     status = check_and_block(ip, location, device_type, os_type)
@@ -157,10 +166,6 @@ def login():
             "FALSE", 0
         )
         return jsonify({"status": "blocked"}), 403
-
-    # IP 변환 + db에 기록
-    country, city, is_foreign = get_ip_location(ip)
-    location = f"{city}, {country}" if city and country else "Unknown"
     
     # 새 기기 여부 판단
     is_new_device = check_new_device(user_id, device_type)
@@ -173,15 +178,18 @@ def login():
         "FALSE" if status == "blacklisted" else "TRUE",
         0  # session_duration: 로그인 시점엔 알 수 없어서 0
     )
+    
+    # AI 모델로부터 실제 오차값 추출
+    actual_error = get_reconstruction_error(user_id, ip, location, device_type, os_type, browser)
 
     # 파이프라인 호출
     pipeline_result = process_login_and_alert(
         user_id=user_id,
-        reconstruction_error=0,         # detection_model.py 연결 필요
+        reconstruction_error=actual_error,   
         is_overseas=bool(is_foreign),
         is_new_device=is_new_device,
         fail_count=login_attempts[ip],
-        is_odd_time=False                # 비정상 시간대 판단 로직 필요
+        is_odd_time=is_odd_time              
     )
 
     # 프론트엔드에 응답 보내기
