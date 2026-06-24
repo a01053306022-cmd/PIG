@@ -1,3 +1,5 @@
+import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 # Flask = 서버 만드는 도구
 # request = 프론트에서 오는 데이터 받는 도구
 # jsonify = 데이터를 JSON 형식으로 변환해서 보내는 도구
@@ -189,7 +191,7 @@ def login():
         timestamp, user_id, ip, location,
         device_type, os_type, browser,
         "FALSE" if status == "blacklisted" else "TRUE",
-        0  # session_duration: 로그인 시점엔 알 수 없어서 0
+        0,  # session_duration: 로그인 시점엔 알 수 없어서 0
     )
 
     # 프론트엔드에 응답 보내기
