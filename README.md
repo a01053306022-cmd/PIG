@@ -23,7 +23,7 @@
 
 # 3. 역할 분담 내역
 
-이채영(팀장)(@a01053306022-cmd): 데이터셋 구축 및 프론트엔드
+이채영(팀장)([@a01053306022-cmd](https://github.com/a01053306022-cmd)): 데이터셋 구축 및 프론트엔드
 - (dataset) `login_log.db`: 메인 데이터베이스 파일
 - (dataset) `data.py`: 학습 및 테스트 데이터셋을 CSV 파일로 가공(전처리)
 - (prontend) `app_login.py`: 실시간 로그인 기록을 받아오기 위한 임시 사이트로, 백엔드와 실시간 연결됨
@@ -31,7 +31,7 @@
 - (prontend) `db_handler.py`: python-db 파일 간 연결성 보장
 - (prontend) `alert_handler.py`: db에 저장된 알림 전송 내역을 대시보드에 표시
  
-서호연(@standuphy): 백엔드-모델 구축 및 학습, 테스트
+서호연([@standuphy](https://github.com/standuphy)): 백엔드-모델 구축 및 학습, 테스트
 - (backend-alarm) `alert_notifier.py`: 위험 지수 상승 시 사용자에게 알림 전송
 - (backend-alarm) `detection_model.py`: 로그인 기록의 해킹 의심 정도를 판별하는 이상 탐지 모델
 - (backend-alarm) `pipeline.py`: 최종 위험 지수 산출
@@ -39,7 +39,7 @@
 - (backend-alarm) `train.py`: 모델 학습 및 블랙리스트 업데이트
 - (backend-alarm) `saved_model.pth`: 학습 완료된 모델의 가중치 저장 파일
 
-이세나(@i4302904-source): 백엔드-서버 구축 및 모델 연결
+이세나([@i4302904-source](https://github.com/i4302904-source)): 백엔드-서버 구축 및 모델 연결
 - (master) `app.py`: 프론트엔드와 이상 탐지 모델 간의 요청 조율 및 전체 시스템 운영—로그인 정보를 받아 IP를 국가 및 지역 정보로 변환해 db에 저장, 블랙리스트 조회를 통한 IP 접속 차단, 이상 탐지 모델과 파이프라인 간 연결, 로그인 시도 결과 및 위험 지수를 db에 저장 등
 
 ---
