@@ -13,7 +13,7 @@
 
 # 2. 데이터셋 및 분석 모델 요약
 
-학습 데이터: kaggle의 공개 데이터셋(https://kaggle.com) 에서 필요한 column만을 취사선택하여 사용. 
+학습 데이터: kaggle의 공개 데이터셋 [Authentication & Authorization Failures Dataset](https://www.kaggle.com/datasets/mirzayasirabdullah07/authentication-and-authorization-failures-dataset) 에서 필요한 column만을 취사선택하여 사용. 
 
 테스트 데이터: Google Takeout 기능을 사용해 팀원 3인의 구글 계정 로그인 기록을 다운로드한 후 필요한 column만을 선택, 공란을 임의로 채워 데이터셋을 구축.
 
