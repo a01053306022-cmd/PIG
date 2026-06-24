@@ -91,7 +91,7 @@ with torch.no_grad():
 
     # Precision, Recall 계산을 위한 커트라인 설정, 정상 데이터만 있는 train의 오차 중 상위 5%를 해킹 커트라인으로
     train_outputs = model(X_train)
-    train_losses = torch.mean((train_outputs - X_train)**2, dim=1).numpy()
+    train_losses = torch.mean((train_outputs - X_train)**2, dim=1).detach().cpu().numpy()
     threshold = np.percentile(train_losses, 95)
 
     # 커트라인 넘으면 해킹(1), 아니면 정상(0)으로 판단
