@@ -36,6 +36,12 @@ def init_ip_location_table():
             city TEXT,                                
             is_foreign INTEGER,                       
             checked_at TEXT)""")
+            
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS blacklist (
+            ip_address TEXT, location TEXT, device_type TEXT, os_type TEXT
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -155,21 +161,12 @@ def login():
         insert_login_log(
             timestamp, user_id, ip, location,
             device_type, os_type, browser,
-            "FALSE", 0
+            "FALSE", 0, 0.0, "차단"
         )
         return jsonify({"status": "blocked"}), 403
     
     # 새 기기 여부 판단
     is_new_device = check_new_device(user_id, device_type)
-
-    # real_dataset 테이블에 로그인 기록 저장
-    # db_handler.py의 insert_login_log() 사용
-    insert_login_log(
-        timestamp, user_id, ip, location,
-        device_type, os_type, browser,
-        "FALSE" if status == "blacklisted" else "TRUE",
-        0  # session_duration: 로그인 시점엔 알 수 없어서 0
-    )
     
     # AI 모델로부터 실제 오차값 추출
     actual_error = get_reconstruction_error(user_id, ip, location, device_type, os_type, browser)
@@ -182,6 +179,15 @@ def login():
         is_new_device=is_new_device,
         fail_count=login_attempts[ip],
         is_odd_time=is_odd_time              
+    )
+
+    # real_dataset 테이블에 로그인 기록 저장
+    # db_handler.py의 insert_login_log() 사용
+    insert_login_log(
+        timestamp, user_id, ip, location,
+        device_type, os_type, browser,
+        "FALSE" if status == "blacklisted" else "TRUE",
+        0  # session_duration: 로그인 시점엔 알 수 없어서 0
     )
 
     # 프론트엔드에 응답 보내기
