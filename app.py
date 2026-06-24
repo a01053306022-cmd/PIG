@@ -187,11 +187,19 @@ def login():
 
     # real_dataset 테이블에 로그인 기록 저장
     # db_handler.py의 insert_login_log() 사용
+    # real_dataset 테이블에 로그인 기록 저장
     insert_login_log(
-        timestamp, user_id, ip, location,
-        device_type, os_type, browser,
-        "FALSE" if status == "blacklisted" else "TRUE",
-        0,  # session_duration: 로그인 시점엔 알 수 없어서 0
+        timestamp,
+        user_id,
+        ip,
+        location,
+        device_type,
+        os_type,
+        browser,
+        "TRUE" if password_correct else "FALSE",
+        0,  # session_duration
+        pipeline_result.get("risk_score", 0.0),
+        pipeline_result.get("status", "정상")
     )
 
     # 프론트엔드에 응답 보내기
