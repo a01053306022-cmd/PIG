@@ -89,35 +89,26 @@ def is_foreign_ip(ip):
     return bool(row[0])
 
 # 반복 로그인 감지 + 블랙리스트 추가 (3회 기준)
-def check_and_block(ip, location, device_type, os_type):
+def check_and_block(ip, location, device_type, os_type, is_success):
     # db의 blacklist 테이블과 대조 (db_handler.py의 함수 사용)
     if check_blacklist(ip, location, device_type, os_type):
         return "blocked"
     
-    login_attempts[ip] += 1
+    if not is_success:
+        login_attempts[ip] += 1
     
-    # 3회 이상이면 blacklist 테이블에 추가
     if login_attempts[ip] >= 3:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-        # blacklist 테이블 없으면 자동 생성 (db_handler.py와 동일한 구조)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS blacklist (
-                ip_address TEXT,
-                location TEXT,
-                device_type TEXT,
-                os_type TEXT
+                ip_address TEXT, location TEXT, device_type TEXT, os_type TEXT
             )
         """)
-        cursor.execute("""
-            INSERT INTO blacklist (ip_address, location, device_type, os_type)
-            VALUES (?, ?, ?, ?)
-        """, (ip, location, device_type, os_type))
+        cursor.execute("INSERT INTO blacklist VALUES (?, ?, ?, ?)", (ip, location, device_type, os_type))
         conn.commit()
         conn.close()
         return "blacklisted"
-    
-    # 3회 미만이면 -> 아직은 정상적인 시도로 판단
     return "ok"
 
 # 새 기기인지 판단하는 함수
@@ -148,6 +139,7 @@ def login():
     browser = data.get("browser", "Unknown") # 브라우저 종류
     
     user_id = data.get("user_id")
+    password_correct = data.get("password_correct", True)
 
     # IP 변환 + db에 기록
     country, city, is_foreign = get_ip_location(ip)
@@ -157,7 +149,7 @@ def login():
     is_odd_time = 1 <= now.hour <= 5
 
     # 블랙리스트 차단 확인
-    status = check_and_block(ip, location, device_type, os_type)
+    status = check_and_block(ip, location, device_type, os_type, password_correct)
     if status == "blocked":
         # 차단된 경우에도 real_dataset에 기록 (success=FALSE)
         insert_login_log(
