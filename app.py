@@ -1,3 +1,5 @@
+import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 # Flask = 서버 만드는 도구
 # request = 프론트에서 오는 데이터 받는 도구
 # jsonify = 데이터를 JSON 형식으로 변환해서 보내는 도구
@@ -8,6 +10,7 @@ import sqlite3 # DB 다루는 도구
 # 자동으로 0으로 초기화 해주는 도구(IP횟수 셀 때 사용)
 from collections import defaultdict 
 
+from detection_model import get_reconstruction_error 
 from db_handler import check_blacklist, insert_login_log
 from pipeline import process_login_and_alert
 
@@ -35,6 +38,12 @@ def init_ip_location_table():
             city TEXT,                                
             is_foreign INTEGER,                       
             checked_at TEXT)""")
+            
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS blacklist (
+            ip_address TEXT, location TEXT, device_type TEXT, os_type TEXT
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -88,35 +97,26 @@ def is_foreign_ip(ip):
     return bool(row[0])
 
 # 반복 로그인 감지 + 블랙리스트 추가 (3회 기준)
-def check_and_block(ip, location, device_type, os_type):
+def check_and_block(ip, location, device_type, os_type, is_success):
     # db의 blacklist 테이블과 대조 (db_handler.py의 함수 사용)
     if check_blacklist(ip, location, device_type, os_type):
         return "blocked"
     
-    login_attempts[ip] += 1
+    if not is_success:
+        login_attempts[ip] += 1
     
-    # 3회 이상이면 blacklist 테이블에 추가
     if login_attempts[ip] >= 3:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-        # blacklist 테이블 없으면 자동 생성 (db_handler.py와 동일한 구조)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS blacklist (
-                ip_address TEXT,
-                location TEXT,
-                device_type TEXT,
-                os_type TEXT
+                ip_address TEXT, location TEXT, device_type TEXT, os_type TEXT
             )
         """)
-        cursor.execute("""
-            INSERT INTO blacklist (ip_address, location, device_type, os_type)
-            VALUES (?, ?, ?, ?)
-        """, (ip, location, device_type, os_type))
+        cursor.execute("INSERT INTO blacklist VALUES (?, ?, ?, ?)", (ip, location, device_type, os_type))
         conn.commit()
         conn.close()
         return "blacklisted"
-    
-    # 3회 미만이면 -> 아직은 정상적인 시도로 판단
     return "ok"
 
 # 새 기기인지 판단하는 함수
@@ -138,6 +138,7 @@ def login():
 
     # 현재 시간을 "2026-06-18 14:30" 같은 문자열 형식으로 만듦
     # db의 timestamp 컬럼 형식과 맞추기 위해 이 포맷을 사용
+    now = datetime.datetime.now()
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     
     # 프론트로부터 받은 것 없으면 기본값 "Unknown"
@@ -146,42 +147,57 @@ def login():
     browser = data.get("browser", "Unknown") # 브라우저 종류
     
     user_id = data.get("user_id")
-
-    # 블랙리스트 차단 확인
-    status = check_and_block(ip, location, device_type, os_type)
-    if status == "blocked":
-        # 차단된 경우에도 real_dataset에 기록 (success=FALSE)
-        insert_login_log(
-            timestamp, user_id, ip, location,
-            device_type, os_type, browser,
-            "FALSE", 0
-        )
-        return jsonify({"status": "blocked"}), 403
+    password_correct = data.get("password_correct", True)
 
     # IP 변환 + db에 기록
     country, city, is_foreign = get_ip_location(ip)
     location = f"{city}, {country}" if city and country else "Unknown"
     
+    # 비정상 시간대 판단 로직 추가
+    is_odd_time = 1 <= now.hour <= 5
+
+    # 블랙리스트 차단 확인
+    status = check_and_block(ip, location, device_type, os_type, password_correct)
+    if status == "blocked":
+        # 차단된 경우에도 real_dataset에 기록 (success=FALSE)
+        insert_login_log(
+            timestamp, user_id, ip, location,
+            device_type, os_type, browser,
+            "FALSE", 0, 0.0, "차단"
+        )
+        return jsonify({"status": "blocked"}), 403
+    
     # 새 기기 여부 판단
     is_new_device = check_new_device(user_id, device_type)
-
-    # real_dataset 테이블에 로그인 기록 저장
-    # db_handler.py의 insert_login_log() 사용
-    insert_login_log(
-        timestamp, user_id, ip, location,
-        device_type, os_type, browser,
-        "FALSE" if status == "blacklisted" else "TRUE",
-        0  # session_duration: 로그인 시점엔 알 수 없어서 0
-    )
+    
+    # AI 모델로부터 실제 오차값 추출
+    actual_error = get_reconstruction_error(user_id, ip, location, device_type, os_type, browser)
 
     # 파이프라인 호출
     pipeline_result = process_login_and_alert(
         user_id=user_id,
-        reconstruction_error=0,         # detection_model.py 연결 필요
+        reconstruction_error=actual_error,   
         is_overseas=bool(is_foreign),
         is_new_device=is_new_device,
         fail_count=login_attempts[ip],
-        is_odd_time=False                # 비정상 시간대 판단 로직 필요
+        is_odd_time=is_odd_time,        
+    )
+
+    # real_dataset 테이블에 로그인 기록 저장
+    # db_handler.py의 insert_login_log() 사용
+    # real_dataset 테이블에 로그인 기록 저장
+    insert_login_log(
+        timestamp,
+        user_id,
+        ip,
+        location,
+        device_type,
+        os_type,
+        browser,
+        "TRUE" if password_correct else "FALSE",
+        0,  # session_duration
+        pipeline_result.get("risk_score", 0.0),
+        pipeline_result.get("status", "정상")
     )
 
     # 프론트엔드에 응답 보내기
