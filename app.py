@@ -180,10 +180,10 @@ def login():
         is_overseas=bool(is_foreign),
         is_new_device=is_new_device,
         fail_count=login_attempts[ip],
-        is_odd_time=is_odd_time              
+        is_odd_time=is_odd_time,  
+        pipeline_result.get('risk_score', 0.0), 
+        pipeline_result.get('status', '정상')            
     )
-    pipeline_result.get('risk_score', 0.0), 
-    pipeline_result.get('status', '정상')  
 
     # real_dataset 테이블에 로그인 기록 저장
     # db_handler.py의 insert_login_log() 사용
