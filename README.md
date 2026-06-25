@@ -1,4 +1,9 @@
-# 1. 프로젝트 요약 및 성과
+# 26-1 오픈소스프로그래밍 기말 팀 프로젝트 <계정 해킹 위험도 분석 서비스>
+### PIG (2514549 이채영, 2511283 서호연, 2515180 이세나)
+
+---
+
+### 1. 프로젝트 요약 및 성과
 
 프로젝트 목적: 실시간 로그인 기록을 바탕으로 계정 해킹 위험도를 분석하는 서비스를 구축하여 단순히 ID-PW 조합만을 확인하는 정적 방어 체계의 한계를 극복하고 오픈소스를 활용한 기술의 안정적 융합을 도모하고자 함. 더불어 사이버 개인정보 침해 사고 감소 문제의 해결책을 제시함으로써 현존하는 플랫폼 전반의 계정 보안 수준의 상향 평준화를 지향, 사회적 비용 감소로 귀결될 수 있도록 기여하고자 함.
 
@@ -11,9 +16,9 @@
 
 ---
 
-# 2. 데이터셋 및 분석 모델 요약
+### 2. 데이터셋 및 분석 모델 요약
 
-학습 데이터: kaggle의 공개 데이터셋(https://kaggle.com) 에서 필요한 column만을 취사선택하여 사용. 
+학습 데이터: kaggle의 공개 데이터셋 [Authentication & Authorization Failures Dataset](https://www.kaggle.com/datasets/mirzayasirabdullah07/authentication-and-authorization-failures-dataset) 에서 필요한 column만을 취사선택하여 사용. 
 
 테스트 데이터: Google Takeout 기능을 사용해 팀원 3인의 구글 계정 로그인 기록을 다운로드한 후 필요한 column만을 선택, 공란을 임의로 채워 데이터셋을 구축.
 
@@ -21,7 +26,7 @@
 
 ---
 
-# 3. 역할 분담 내역
+### 3. 역할 분담 내역
 
 이채영(팀장)([@a01053306022-cmd](https://github.com/a01053306022-cmd)): 데이터셋 구축 및 프론트엔드
 - (dataset) `login_log.db`: 메인 데이터베이스 파일
@@ -44,8 +49,8 @@
 
 ---
 
-# 4. 기타
+### 4. 기타
 
 협업 관리용 노션: [https://notion.com](https://app.notion.com/p/PIG-365c9a45261180f79d38e971e462c51a?source=copy_link)
 
-테스트 영상 드라이브: 
+관련 파일 드라이브: [https://drive.google.com](https://drive.google.com/drive/folders/13qgx2alCxuCzLqhbolwsq_JmOUzRnpjO?usp=drive_link)
